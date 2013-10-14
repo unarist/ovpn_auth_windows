@@ -32,7 +32,7 @@ unique_ptr<const string> env_get(const char *envp[], const string& key)
 
 		if(!entry.compare(0, keylen, key) && entry.at(keylen) == '=')
 		{
-			return unique_ptr<const string>(new string(entry.substr(keylen + 1)));
+			return unique_ptr<const string>(new string(entry.begin() + keylen + 1, entry.end()));
 		}
 	}
 
