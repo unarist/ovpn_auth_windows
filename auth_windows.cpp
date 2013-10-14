@@ -6,6 +6,7 @@
 
 using namespace std;
 
+// TODO: rewrite logging with v3 plugin callbacks
 const TCHAR MsgHeader[] = "[auth_windows] ";
 
 template <typename Ptr>
@@ -86,7 +87,46 @@ openvpn_plugin_open_v1 (unsigned int *type_mask, const char *argv[], const char 
 OPENVPN_EXPORT int
 openvpn_plugin_func_v1 (openvpn_plugin_handle_t handle, const int type, const char *argv[], const char *envp[])
 {
-	return OPENVPN_PLUGIN_FUNC_SUCCESS;
+	const auto context = static_cast<Context *>(handle);
+
+	const auto username = env_get(envp, "username");
+	const auto password = env_get(envp, "password");
+
+	HANDLE token;
+
+	if(username == nullptr || password == nullptr)
+	{
+		cout << MsgHeader << "Deny: No username or password." << endl;
+		return OPENVPN_PLUGIN_FUNC_ERROR;
+	}
+
+	cout << MsgHeader << "'" << *username << "' trying." << endl;
+	if(!LogonUser(username->c_str(), NULL, password->c_str(),
+		LOGON32_LOGON_NETWORK, LOGON32_PROVIDER_DEFAULT, &token))
+		cout << MsgHeader << "Deny: Logon failed(" << GetLastError() << ")." << endl;
+	else
+	{
+		if(context->groupSid != nullptr)
+		{
+			BOOL result;
+			if(!CheckTokenMembership(token, context->groupSid.get(), &result))
+				cout << MsgHeader << "CheckTokenMembership fails with error " << GetLastError() << endl;
+			if(result)
+			{
+				cout << MsgHeader << "Accepted." << endl;
+				return OPENVPN_PLUGIN_FUNC_SUCCESS;
+			}
+			else
+				cout << MsgHeader << "Deny: This account is not allowed." << endl;
+		}
+		else
+		{
+			cout << MsgHeader << "Accepted." << endl;
+			return OPENVPN_PLUGIN_FUNC_SUCCESS;
+		}
+	}
+
+	return OPENVPN_PLUGIN_FUNC_ERROR;
 }
 
 OPENVPN_EXPORT void
